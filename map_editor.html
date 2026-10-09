@@ -1,0 +1,1350 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>地图编辑器</title>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+    <style>
+        body { margin: 0; background: #111; font-family: Arial, sans-serif; height: 100vh; }
+        #canvas { display: block; position: fixed; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; }
+        #ui { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; color: white; font-size: 14px; z-index: 100; }
+        #ui h3 { margin: 0 0 10px 0; color: #00ffff; }
+        #ui select, #ui button { display: block; margin-bottom: 8px; padding: 5px; width: 150px; }
+        #items { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; color: white; font-size: 14px; z-index: 100; }
+        #items h3 { margin: 0 0 10px 0; color: #00ffff; }
+        .item-btn { display: block; margin-bottom: 5px; padding: 8px; width: 180px; background: #333; border: 2px solid #555; color: white; cursor: pointer; border-radius: 4px; }
+        .item-btn:hover { background: #444; border-color: #00ffff; }
+        .item-btn.selected { background: #003344; border-color: #00ffff; color: #00ffff; }
+        #info { position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px; color: #aaa; font-size: 12px; z-index: 100; }
+        #help { position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px; color: #aaa; font-size: 12px; z-index: 100; }
+        #status { color: #00ff00; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div id="canvas"></div>
+    <div id="ui">
+        <h3>地图编辑器</h3>
+        <select id="mapSelect">
+            <option value="ruin_city">废墟城市</option>
+            <option value="desert_base">沙漠基地</option>
+            <option value="ice_station">极地空间站</option>
+        </select>
+        <button id="saveBtn">保存地图</button>
+        <button id="clearBtn">清空地图</button>
+        <button id="resetBtn">恢复默认</button>
+        <div id="status">状态: 就绪</div>
+    </div>
+    <div id="items">
+        <h3>物品栏</h3>
+        <button class="item-btn" data-type="wall">高墙 (wall)</button>
+        <button class="item-btn" data-type="low_wall">矮墙 (low_wall)</button>
+        <button class="item-btn" data-type="box">箱子 (box)</button>
+        <button class="item-btn" data-type="platform">平台 (platform)</button>
+        <button class="item-btn" data-type="trench">坑道 (trench)</button>
+        <button class="item-btn" data-type="window">窗户墙 (window)</button>
+        <button class="item-btn" data-type="pillar">柱子 (pillar)</button>
+    </div>
+    <div id="info">
+        坐标: <span id="coord">0, 0, 0</span><br>
+        选中: <span id="selected">-</span><br>
+        类型: <span id="objType">-</span><br>
+        位置: <span id="objPos">-</span><br>
+        尺寸: <span id="objSize">-</span><br>
+        残影大小: <span id="previewScale">1.00</span>x<br>
+        FPS: <span id="fps">0</span>
+    </div>
+    <div id="help">
+        WASD - 移动<br>
+        鼠标 - 视角<br>
+        空格 - 跳跃<br>
+        双击空格 - 飞行<br>
+        滚轮 - 缩放残影<br>
+        点击 - 放置/选中<br>
+        Delete - 删除选中<br>
+        Ctrl+Z - 撤销
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        let scene, camera, renderer;
+        let keys = {};
+        let mouseSensitivity = 0.0022;
+        let moveSpeed = 0.15;
+        let flySpeed = 0.2;
+        let isFlying = false;
+        let lastSpaceTime = 0;
+        let yaw = 0, pitch = -0.5;
+        let isLeftMouseDown = false;
+        let mouseDownX = 0, mouseDownY = 0;
+        let velocityY = 0;
+        let gravity = 22;
+        let maxJumpHeight = 2.0;
+        let maxStepHeight = 1.0;
+        let onGround = true;
+        let raycaster, mouse;
+        let selectedObject = null;
+        let selectedItemType = null;
+        let previewMesh = null;
+        let obstacles = [];
+        let mapConfig = {};
+        let previewScale = 1.0;
+        const MAX_UNDO = 50;
+        let undoHistory = [];
+        let originalMapConfigs = null;
+
+        function getMapConfigs() {
+            return {
+                ruin_city: {
+                    name: '废墟城市',
+                    skyColor: '#080d16',
+                    fogColor: '#080d16',
+                    fogNear: 25,
+                    fogFar: 90,
+                    floorColor: '#202831',
+                    wallColor: '#17212c',
+                    obstacleColors: ['#4a3c35', '#34434c', '#5a4a3a'],
+                    ambientColor: '#9ec9ff',
+                    dirLightColor: '#9dc9ff',
+                    dirLightIntensity: 2.3,
+                    pointLightColor: '#ff2020',
+                    pointLightCount: 8,
+                    pointLightIntensity: 3,
+                    playerStart1: [0, 1.7, 35],
+                    playerStart2: [0, 1.7, -35],
+                    layout: [
+                        {"type": "wall", "x": 0, "y": 5, "z": -48, "sx": 100, "sy": 10, "sz": 2},
+                        {"type": "wall", "x": 0, "y": 5, "z": 48, "sx": 100, "sy": 10, "sz": 2},
+                        {"type": "wall", "x": -48, "y": 5, "z": 0, "sx": 2, "sy": 10, "sz": 100},
+                        {"type": "wall", "x": 48, "y": 5, "z": 0, "sx": 2, "sy": 10, "sz": 100},
+                        {"type": "wall", "x": 0, "y": 4, "z": 0, "sx": 2, "sy": 8, "sz": 40},
+                        {"type": "low_wall", "x": -15, "y": 0.5, "z": 0, "sx": 4, "sy": 1, "sz": 20},
+                        {"type": "low_wall", "x": 15, "y": 0.5, "z": 0, "sx": 4, "sy": 1, "sz": 20},
+                        {"type": "box", "x": -25, "y": 0.5, "z": 15, "sx": 2, "sy": 1, "sz": 2},
+                        {"type": "box", "x": 25, "y": 0.5, "z": 15, "sx": 2, "sy": 1, "sz": 2},
+                        {"type": "box", "x": -25, "y": 0.5, "z": -15, "sx": 2, "sy": 1, "sz": 2},
+                        {"type": "box", "x": 25, "y": 0.5, "z": -15, "sx": 2, "sy": 1, "sz": 2},
+                        {"type": "platform", "x": 0, "y": 2.25, "z": 20, "sx": 8, "sy": 0.5, "sz": 8},
+                        {"type": "platform", "x": 0, "y": 2.25, "z": -20, "sx": 8, "sy": 0.5, "sz": 8},
+                        {"type": "pillar", "x": -10, "y": 2, "z": 25, "radius": 0.5, "height": 4},
+                        {"type": "pillar", "x": 10, "y": 2, "z": 25, "radius": 0.5, "height": 4},
+                        {"type": "pillar", "x": -10, "y": 2, "z": -25, "radius": 0.5, "height": 4},
+                        {"type": "pillar", "x": 10, "y": 2, "z": -25, "radius": 0.5, "height": 4}
+                    ],
+                    extraFeatures: ["broken_buildings", "street_lamps", "debris"]
+                },
+                desert_base: {
+                    name: '沙漠基地',
+                    skyColor: '#87CEEB',
+                    fogColor: '#FFE4B5',
+                    fogNear: 30,
+                    fogFar: 100,
+                    floorColor: '#DAA520',
+                    wallColor: '#8B4513',
+                    obstacleColors: ['#A0522D', '#D2691E', '#CD853F'],
+                    ambientColor: '#FFFFFF',
+                    dirLightColor: '#FFFFFF',
+                    dirLightIntensity: 4.5,
+                    pointLightColor: '#FFD700',
+                    pointLightCount: 4,
+                    pointLightIntensity: 2,
+                    playerStart1: [0, 1.7, 35],
+                    playerStart2: [0, 1.7, -35],
+                    layout: [
+                        {"type": "wall", "x": 0, "y": 5, "z": -48, "sx": 100, "sy": 10, "sz": 2},
+                        {"type": "wall", "x": 0, "y": 5, "z": 48, "sx": 100, "sy": 10, "sz": 2},
+                        {"type": "wall", "x": -48, "y": 5, "z": 0, "sx": 2, "sy": 10, "sz": 100},
+                        {"type": "wall", "x": 48, "y": 5, "z": 0, "sx": 2, "sy": 10, "sz": 100},
+                        {"type": "wall", "x": 0, "y": 3, "z": 0, "sx": 2, "sy": 6, "sz": 50},
+                        {"type": "low_wall", "x": -20, "y": 0.5, "z": 0, "sx": 3, "sy": 1, "sz": 30},
+                        {"type": "low_wall", "x": 20, "y": 0.5, "z": 0, "sx": 3, "sy": 1, "sz": 30},
+                        {"type": "box", "x": -30, "y": 0.5, "z": 10, "sx": 3, "sy": 1, "sz": 3},
+                        {"type": "box", "x": 30, "y": 0.5, "z": 10, "sx": 3, "sy": 1, "sz": 3},
+                        {"type": "box", "x": -30, "y": 0.5, "z": -10, "sx": 3, "sy": 1, "sz": 3},
+                        {"type": "box", "x": 30, "y": 0.5, "z": -10, "sx": 3, "sy": 1, "sz": 3},
+                        {"type": "window", "x": 0, "y": 3, "z": 25, "sx": 8, "sy": 6, "sz": 0.5},
+                        {"type": "window", "x": 0, "y": 3, "z": -25, "sx": 8, "sy": 6, "sz": 0.5},
+                        {"type": "platform", "x": -35, "y": 3, "z": 0, "sx": 10, "sy": 0.5, "sz": 15},
+                        {"type": "platform", "x": 35, "y": 3, "z": 0, "sx": 10, "sy": 0.5, "sz": 15}
+                    ],
+                    extraFeatures: ["sand_dunes", "cacti"]
+                },
+                ice_station: {
+                    name: '极地空间站',
+                    skyColor: '#1a3a5c',
+                    fogColor: '#4a6a8c',
+                    fogNear: 20,
+                    fogFar: 80,
+                    floorColor: '#87CEEB',
+                    wallColor: '#6a9ac0',
+                    obstacleColors: ['#B0E0E6', '#ADD8E6', '#87CEEB'],
+                    ambientColor: '#E0F4FF',
+                    dirLightColor: '#FFFFFF',
+                    dirLightIntensity: 3,
+                    pointLightColor: '#00BFFF',
+                    pointLightCount: 6,
+                    pointLightIntensity: 2.5,
+                    playerStart1: [0, 1.7, 35],
+                    playerStart2: [0, 1.7, -35],
+                    layout: [
+                        {"type": "wall", "x": 0, "y": 5, "z": -48, "sx": 100, "sy": 10, "sz": 2},
+                        {"type": "wall", "x": 0, "y": 5, "z": 48, "sx": 100, "sy": 10, "sz": 2},
+                        {"type": "wall", "x": -48, "y": 5, "z": 0, "sx": 2, "sy": 10, "sz": 100},
+                        {"type": "wall", "x": 48, "y": 5, "z": 0, "sx": 2, "sy": 10, "sz": 100},
+                        {"type": "wall", "x": -25, "y": 4, "z": 0, "sx": 2, "sy": 8, "sz": 50},
+                        {"type": "wall", "x": 25, "y": 4, "z": 0, "sx": 2, "sy": 8, "sz": 50},
+                        {"type": "low_wall", "x": 0, "y": 0.5, "z": -15, "sx": 40, "sy": 1, "sz": 2},
+                        {"type": "low_wall", "x": 0, "y": 0.5, "z": 15, "sx": 40, "sy": 1, "sz": 2},
+                        {"type": "box", "x": -10, "y": 0.5, "z": 0, "sx": 2, "sy": 1, "sz": 2},
+                        {"type": "box", "x": 10, "y": 0.5, "z": 0, "sx": 2, "sy": 1, "sz": 2},
+                        {"type": "trench", "x": 0, "y": 0.25, "z": 0, "sx": 15, "sy": 0.5, "sz": 15},
+                        {"type": "platform", "x": -35, "y": 2.75, "z": 20, "sx": 8, "sy": 0.5, "sz": 8},
+                        {"type": "platform", "x": 35, "y": 2.75, "z": 20, "sx": 8, "sy": 0.5, "sz": 8},
+                        {"type": "platform", "x": -35, "y": 2.75, "z": -20, "sx": 8, "sy": 0.5, "sz": 8},
+                        {"type": "platform", "x": 35, "y": 2.75, "z": -20, "sx": 8, "sy": 0.5, "sz": 8},
+                        {"type": "pillar", "x": 0, "y": 3, "z": -35, "radius": 0.6, "height": 6},
+                        {"type": "pillar", "x": 0, "y": 3, "z": 35, "radius": 0.6, "height": 6}
+                    ],
+                    extraFeatures: ["crystal_structures", "ice_walls"]
+                }
+            };
+        }
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color('#111111');
+            
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 15, 40);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.getElementById('canvas').appendChild(renderer.domElement);
+            
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+            
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambientLight);
+            
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+            dirLight.position.set(50, 80, 50);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
+            dirLight.shadow.camera.near = 0.5;
+            dirLight.shadow.camera.far = 200;
+            dirLight.shadow.camera.left = -60;
+            dirLight.shadow.camera.right = 60;
+            dirLight.shadow.camera.top = 60;
+            dirLight.shadow.camera.bottom = -60;
+            dirLight.shadow.bias = -0.0001;
+            scene.add(dirLight);
+            
+            originalMapConfigs = JSON.parse(JSON.stringify(getMapConfigs()));
+            
+            fetch('/maps.json')
+                .then(response => response.json())
+                .then(savedConfigs => {
+                    window.savedMapConfigs = savedConfigs;
+                    loadMap();
+                })
+                .catch(() => {
+                    window.savedMapConfigs = getMapConfigs();
+                    loadMap();
+                });
+            
+            document.getElementById('mapSelect').addEventListener('change', (e) => {
+                console.log('Map changed:', e.target.value);
+                loadMap();
+            });
+            document.getElementById('saveBtn').addEventListener('click', () => {
+                if (confirm('确定要保存当前地图吗？')) {
+                    saveMap();
+                }
+            });
+            document.getElementById('clearBtn').addEventListener('click', () => {
+                if (confirm('确定要清空当前地图吗？此操作将删除所有障碍物。')) {
+                    clearMap();
+                }
+            });
+            document.getElementById('resetBtn').addEventListener('click', () => {
+                if (confirm('确定要恢复当前地图到默认状态吗？所有修改将丢失。')) {
+                    resetMap();
+                }
+            });
+            
+            document.querySelectorAll('.item-btn').forEach(btn => {
+                btn.addEventListener('click', () => selectItem(btn.dataset.type));
+            });
+            
+            window.addEventListener('resize', onWindowResize);
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('mousedown', onMouseDown);
+            window.addEventListener('wheel', onMouseWheel);
+            window.addEventListener('keydown', onKeyDown);
+            window.addEventListener('keyup', onKeyUp);
+            
+            window.addEventListener('mouseup', onMouseUp);
+            
+            animate();
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function createGround(color) {
+            const geometry = new THREE.PlaneGeometry(100, 100);
+            const material = new THREE.MeshStandardMaterial({ color: new THREE.Color(color), roughness: 0.8 });
+            const ground = new THREE.Mesh(geometry, material);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            ground.name = 'ground';
+            scene.add(ground);
+            
+            const gridHelper = new THREE.GridHelper(100, 100, 0x333333, 0x222222);
+            gridHelper.position.y = 0.01;
+            scene.add(gridHelper);
+        }
+
+        function createBoundaryWalls() {
+            const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(mapConfig.wallColor), roughness: 0.8 });
+            
+            const backWall = new THREE.Mesh(new THREE.BoxGeometry(100, 10, 2), mat);
+            backWall.position.set(0, 5, -49);
+            backWall.receiveShadow = true;
+            backWall.userData = { type: 'wall', x: 0, y: 5, z: -49, sx: 100, sy: 10, sz: 2 };
+            scene.add(backWall);
+            obstacles.push({ mesh: backWall, box: new THREE.Box3().setFromObject(backWall) });
+            
+            const frontWall = new THREE.Mesh(new THREE.BoxGeometry(100, 10, 2), mat);
+            frontWall.position.set(0, 5, 49);
+            frontWall.receiveShadow = true;
+            frontWall.userData = { type: 'wall', x: 0, y: 5, z: 49, sx: 100, sy: 10, sz: 2 };
+            scene.add(frontWall);
+            obstacles.push({ mesh: frontWall, box: new THREE.Box3().setFromObject(frontWall) });
+            
+            const leftWall = new THREE.Mesh(new THREE.BoxGeometry(2, 10, 100), mat);
+            leftWall.position.set(-49, 5, 0);
+            leftWall.receiveShadow = true;
+            leftWall.userData = { type: 'wall', x: -49, y: 5, z: 0, sx: 2, sy: 10, sz: 100 };
+            scene.add(leftWall);
+            obstacles.push({ mesh: leftWall, box: new THREE.Box3().setFromObject(leftWall) });
+            
+            const rightWall = new THREE.Mesh(new THREE.BoxGeometry(2, 10, 100), mat);
+            rightWall.position.set(49, 5, 0);
+            rightWall.receiveShadow = true;
+            rightWall.userData = { type: 'wall', x: 49, y: 5, z: 0, sx: 2, sy: 10, sz: 100 };
+            scene.add(rightWall);
+            obstacles.push({ mesh: rightWall, box: new THREE.Box3().setFromObject(rightWall) });
+        }
+
+        function createMapElement(data, index) {
+            const colors = mapConfig.obstacleColors || ['#4a4a4a', '#5a5a5a', '#3a3a3a'];
+            const color = new THREE.Color(colors[index % colors.length]);
+            
+            switch(data.type) {
+                case 'wall':
+                    createWall(data.x, data.y, data.z, data.sx, data.sy, data.sz, color, data);
+                    break;
+                case 'low_wall':
+                    createLowWall(data.x, data.y, data.z, data.sx, data.sy, data.sz, color, data);
+                    break;
+                case 'box':
+                    createBox(data.x, data.y, data.z, data.sx, data.sy, data.sz, color, data);
+                    break;
+                case 'platform':
+                    createPlatform(data.x, data.y, data.z, data.sx, data.sy, data.sz, color, data);
+                    break;
+                case 'trench':
+                    createTrench(data.x, data.y, data.z, data.sx, data.sy, data.sz, color, data);
+                    break;
+                case 'window':
+                    createWindow(data.x, data.y, data.z, data.sx, data.sy, data.sz, color, data);
+                    break;
+                case 'pillar':
+                    createPillar(data.x, data.y, data.z, data.radius, data.height, color, data);
+                    break;
+            }
+        }
+
+        function createWall(x, y, z, sx, sy, sz, color, data) {
+            const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.75 });
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+            mesh.position.set(x, y, z);
+            if (data && data.rotation) mesh.rotation.y = data.rotation;
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.userData = data || { type: 'wall', x, y, z, sx, sy, sz };
+            scene.add(mesh);
+            obstacles.push({ mesh, box: new THREE.Box3().setFromObject(mesh) });
+        }
+
+        function createLowWall(x, y, z, sx, sy, sz, color, data) {
+            const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.75 });
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+            mesh.position.set(x, y, z);
+            if (data && data.rotation) mesh.rotation.y = data.rotation;
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.userData = data || { type: 'low_wall', x, y, z, sx, sy, sz };
+            scene.add(mesh);
+            obstacles.push({ mesh, box: new THREE.Box3().setFromObject(mesh) });
+        }
+
+        function createBox(x, y, z, sx, sy, sz, color, data) {
+            const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.75 });
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+            mesh.position.set(x, y, z);
+            if (data && data.rotation) mesh.rotation.y = data.rotation;
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.userData = data || { type: 'box', x, y, z, sx, sy, sz };
+            scene.add(mesh);
+            obstacles.push({ mesh, box: new THREE.Box3().setFromObject(mesh) });
+        }
+
+        function createPlatform(x, y, z, sx, sy, sz, color, data) {
+            const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.75 });
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+            mesh.position.set(x, y, z);
+            if (data && data.rotation) mesh.rotation.y = data.rotation;
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.userData = data || { type: 'platform', x, y, z, sx, sy, sz };
+            scene.add(mesh);
+            obstacles.push({ mesh, box: new THREE.Box3().setFromObject(mesh) });
+        }
+
+        function createTrench(x, y, z, sx, sy, sz, color, data) {
+            const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color('#1a1a2e'), roughness: 0.9 });
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+            mesh.position.set(x, y, z);
+            if (data && data.rotation) mesh.rotation.y = data.rotation;
+            mesh.receiveShadow = true;
+            mesh.userData = data || { type: 'trench', x, y, z, sx, sy, sz };
+            scene.add(mesh);
+            obstacles.push({ mesh, box: new THREE.Box3().setFromObject(mesh) });
+        }
+
+        function createWindow(x, y, z, sx, sy, sz, color, data) {
+            const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.75 });
+            const frame = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+            frame.position.set(x, y, z);
+            if (data && data.rotation) frame.rotation.y = data.rotation;
+            frame.castShadow = true;
+            frame.receiveShadow = true;
+            frame.userData = data || { type: 'window', x, y, z, sx, sy, sz };
+            scene.add(frame);
+            obstacles.push({ mesh: frame, box: new THREE.Box3().setFromObject(frame) });
+            
+            const glassMat = new THREE.MeshStandardMaterial({ 
+                color: 0x88ccff, 
+                transparent: true, 
+                opacity: 0.3,
+                roughness: 0.2,
+                metalness: 0.1
+            });
+            const glass = new THREE.Mesh(new THREE.BoxGeometry(sx * 0.6, sy * 0.6, sz * 0.5), glassMat);
+            glass.position.set(x, y, z);
+            scene.add(glass);
+        }
+
+        function createPillar(x, y, z, radius, height, color, data) {
+            const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.75 });
+            const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height, 16), mat);
+            mesh.position.set(x, y, z);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.userData = data || { type: 'pillar', x, y, z, radius, height };
+            scene.add(mesh);
+            obstacles.push({ mesh, box: new THREE.Box3().setFromObject(mesh) });
+        }
+
+        function createMapFeatures() {
+            const features = mapConfig.extraFeatures || [];
+            const colors = mapConfig.obstacleColors || ['#4a4a4a', '#5a5a5a', '#3a3a3a'];
+
+            if (features.includes('broken_buildings')) {
+                createBuilding(-35, 3, -35, 6, 6, 6, new THREE.Color(colors[0]));
+                createBuilding(35, 3, 35, 5, 5, 5, new THREE.Color(colors[1]));
+                createBuilding(-30, 2, 30, 4, 4, 4, new THREE.Color(colors[2]));
+            }
+
+            if (features.includes('street_lamps')) {
+                createStreetLamp(-20, -20, mapConfig.pointLightColor);
+                createStreetLamp(20, 20, mapConfig.pointLightColor);
+                createStreetLamp(-25, 25, mapConfig.pointLightColor);
+                createStreetLamp(25, -25, mapConfig.pointLightColor);
+            }
+
+            if (features.includes('debris')) {
+                for (let i = 0; i < 5; i++) {
+                    createDebris(
+                        THREE.MathUtils.randFloat(-40, 40),
+                        THREE.MathUtils.randFloat(-40, 40),
+                        new THREE.Color(colors[2])
+                    );
+                }
+            }
+
+            if (features.includes('sand_dunes')) {
+                createSandDune(-25, -30, mapConfig.floorColor);
+                createSandDune(25, -25, mapConfig.floorColor);
+                createSandDune(-20, 25, mapConfig.floorColor);
+                createSandDune(30, 30, mapConfig.floorColor);
+            }
+
+            if (features.includes('cacti')) {
+                createCactus(-35, -35, new THREE.Color(colors[0]));
+                createCactus(35, -35, new THREE.Color(colors[1]));
+                createCactus(-30, 35, new THREE.Color(colors[0]));
+                createCactus(30, 35, new THREE.Color(colors[1]));
+            }
+
+            if (features.includes('ice_walls')) {
+                createIceWall(-25, 25, new THREE.Color(colors[0]));
+                createIceWall(25, -25, new THREE.Color(colors[1]));
+                createIceWall(-30, 20, new THREE.Color(colors[0]));
+            }
+
+            if (features.includes('crystal_structures')) {
+                createCrystal(-35, -20, new THREE.Color(colors[0]));
+                createCrystal(35, 20, new THREE.Color(colors[1]));
+                createCrystal(-20, 35, new THREE.Color(colors[0]));
+                createCrystal(20, -35, new THREE.Color(colors[1]));
+            }
+        }
+
+        function createBuilding(x, y, z, sx, sy, sz, color) {
+            const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.8 });
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+            mesh.position.set(x, y, z);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+            obstacles.push({ mesh, box: new THREE.Box3().setFromObject(mesh) });
+
+            const windowMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.8 });
+            for (let i = 0; i < 2; i++) {
+                for (let j = 0; j < 2; j++) {
+                    const win = new THREE.Mesh(new THREE.BoxGeometry(sx * 0.3, sy * 0.2, 0.1), windowMat);
+                    win.position.set(x, y - sy * 0.2 + j * sy * 0.4, z + sz * 0.4);
+                    scene.add(win);
+                }
+            }
+        }
+
+        function createStreetLamp(x, z, lightColor) {
+            const poleMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+            const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 6), poleMat);
+            pole.position.set(x, 3, z);
+            pole.castShadow = true;
+            scene.add(pole);
+            obstacles.push({ mesh: pole, box: new THREE.Box3().setFromObject(pole) });
+
+            const lampMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
+            const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 0.5), lampMat);
+            lamp.position.set(x, 5.8, z);
+            scene.add(lamp);
+            obstacles.push({ mesh: lamp, box: new THREE.Box3().setFromObject(lamp) });
+
+            const pointLight = new THREE.PointLight(new THREE.Color(lightColor), 2, 15);
+            pointLight.position.set(x, 6, z);
+            scene.add(pointLight);
+        }
+
+        function createDebris(x, z, color) {
+            const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.9 });
+            const size = THREE.MathUtils.randFloat(0.5, 1.5);
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(size, size * 0.3, size), mat);
+            mesh.position.set(x, size * 0.15, z);
+            mesh.rotation.set(Math.random() * 0.5, Math.random() * Math.PI, Math.random() * 0.5);
+            mesh.castShadow = true;
+            scene.add(mesh);
+            obstacles.push({ mesh, box: new THREE.Box3().setFromObject(mesh) });
+        }
+
+        function createSandDune(x, z, color) {
+            const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(color) || 0xd4a574, roughness: 0.9 });
+            const geometry = new THREE.ConeGeometry(6, 2, 8);
+            const mesh = new THREE.Mesh(geometry, mat);
+            mesh.position.set(x, 1, z);
+            mesh.rotation.y = Math.random() * Math.PI;
+            mesh.castShadow = true;
+            scene.add(mesh);
+            obstacles.push({ mesh, box: new THREE.Box3().setFromObject(mesh) });
+        }
+
+        function createCactus(x, z, color) {
+            const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.7 });
+            const main = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 3), mat);
+            main.position.set(x, 1.5, z);
+            main.castShadow = true;
+            scene.add(main);
+            obstacles.push({ mesh: main, box: new THREE.Box3().setFromObject(main) });
+
+            const arm1 = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 2), mat);
+            arm1.position.set(x + 0.8, 2, z);
+            arm1.rotation.z = Math.PI / 6;
+            scene.add(arm1);
+            obstacles.push({ mesh: arm1, box: new THREE.Box3().setFromObject(arm1) });
+
+            const arm2 = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 1.5), mat);
+            arm2.position.set(x - 0.7, 1.5, z);
+            arm2.rotation.z = -Math.PI / 6;
+            scene.add(arm2);
+            obstacles.push({ mesh: arm2, box: new THREE.Box3().setFromObject(arm2) });
+        }
+
+        function createIceWall(x, z, color) {
+            const mat = new THREE.MeshStandardMaterial({
+                color,
+                roughness: 0.2,
+                metalness: 0.1,
+                transparent: true,
+                opacity: 0.7
+            });
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(10, 4, 0.5), mat);
+            mesh.position.set(x, 2, z);
+            mesh.castShadow = true;
+            scene.add(mesh);
+            obstacles.push({ mesh, box: new THREE.Box3().setFromObject(mesh) });
+        }
+
+        function createCrystal(x, z, color) {
+            const mat = new THREE.MeshStandardMaterial({
+                color,
+                roughness: 0.1,
+                metalness: 0.3
+            });
+            const geometry = new THREE.ConeGeometry(0.6, 3, 6);
+            const mesh = new THREE.Mesh(geometry, mat);
+            mesh.position.set(x, 1.5, z);
+            mesh.rotation.y = Math.random() * Math.PI;
+            mesh.castShadow = true;
+            scene.add(mesh);
+            obstacles.push({ mesh, box: new THREE.Box3().setFromObject(mesh) });
+        }
+
+        function clearScene() {
+            for (let i = scene.children.length - 1; i >= 0; i--) {
+                const child = scene.children[i];
+                if (child.type !== 'AmbientLight' && child.type !== 'DirectionalLight') {
+                    scene.remove(child);
+                }
+            }
+            obstacles = [];
+        }
+
+        function loadMap() {
+            const mapName = document.getElementById('mapSelect').value;
+            const savedConfigs = window.savedMapConfigs || getMapConfigs();
+            mapConfig = savedConfigs[mapName] || getMapConfigs()[mapName];
+            
+            clearScene();
+            
+            scene.background = new THREE.Color(mapConfig.skyColor);
+            
+            if (mapConfig.fogColor) {
+                scene.fog = new THREE.Fog(new THREE.Color(mapConfig.fogColor), mapConfig.fogNear || 20, mapConfig.fogFar || 80);
+            }
+            
+            createGround(mapConfig.floorColor);
+            createBoundaryWalls();
+            
+            if (mapConfig.layout) {
+                mapConfig.layout.forEach((element, index) => {
+                    createMapElement(element, index);
+                });
+            }
+            
+            createMapFeatures();
+            
+            updateUI();
+        }
+
+        function selectItem(type) {
+            if (selectedItemType === type) {
+                selectedItemType = null;
+                removePreviewMesh();
+            } else {
+                selectedItemType = type;
+                createPreviewMesh();
+            }
+            
+            document.querySelectorAll('.item-btn').forEach(btn => {
+                btn.classList.toggle('selected', btn.dataset.type === selectedItemType);
+            });
+            
+            deselectObject();
+        }
+
+        function createPreviewMesh() {
+            removePreviewMesh();
+            
+            const geometry = new THREE.BoxGeometry(2, 2, 2);
+            const material = new THREE.MeshBasicMaterial({ 
+                color: 0x00ffff, 
+                wireframe: true,
+                transparent: true,
+                opacity: 0.4
+            });
+            previewMesh = new THREE.Mesh(geometry, material);
+            scene.add(previewMesh);
+        }
+
+        function removePreviewMesh() {
+            if (previewMesh) {
+                scene.remove(previewMesh);
+                previewMesh.geometry.dispose();
+                previewMesh.material.dispose();
+                previewMesh = null;
+            }
+        }
+
+        function updatePreviewMesh() {
+            if (!previewMesh || !selectedItemType) return;
+            
+            raycaster.setFromCamera(mouse, camera);
+            
+            const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+            const intersectPoint = new THREE.Vector3();
+            raycaster.ray.intersectPlane(groundPlane, intersectPoint);
+            
+            let hitObstacle = null;
+            let hitFace = null;
+            let closestDistance = Infinity;
+            
+            for (const obstacle of obstacles) {
+                const intersects = raycaster.intersectObject(obstacle.mesh);
+                if (intersects.length > 0) {
+                    if (intersects[0].distance < closestDistance) {
+                        closestDistance = intersects[0].distance;
+                        hitObstacle = obstacle;
+                        hitFace = intersects[0].face;
+                        intersectPoint.copy(intersects[0].point);
+                    }
+                }
+            }
+            
+            const sizes = {
+                wall: { sx: 4, sy: 4, sz: 1 },
+                low_wall: { sx: 4, sy: 1, sz: 4 },
+                box: { sx: 2, sy: 1, sz: 2 },
+                platform: { sx: 6, sy: 0.5, sz: 6 },
+                trench: { sx: 8, sy: 0.5, sz: 8 },
+                window: { sx: 4, sy: 3, sz: 0.5 },
+                pillar: { radius: 0.5, height: 3 }
+            };
+            
+            const size = sizes[selectedItemType] || { sx: 2, sy: 2, sz: 2 };
+            
+            if (selectedItemType === 'pillar') {
+                previewMesh.geometry.dispose();
+                previewMesh.geometry = new THREE.CylinderGeometry(size.radius * previewScale, size.radius * previewScale, size.height * previewScale, 16);
+            } else {
+                previewMesh.geometry.dispose();
+                previewMesh.geometry = new THREE.BoxGeometry(size.sx * previewScale, size.sy * previewScale, size.sz * previewScale);
+            }
+            
+            if (hitObstacle && hitFace) {
+                const normal = hitFace.normal.clone();
+                hitObstacle.mesh.updateMatrixWorld();
+                normal.transformDirection(hitObstacle.mesh.matrixWorld);
+                
+                if (Math.abs(normal.y) > 0.5) {
+                    intersectPoint.y = hitObstacle.box.max.y + (size.sy * previewScale) / 2;
+                } else if (Math.abs(normal.x) > 0.5) {
+                    intersectPoint.x = normal.x > 0 ? hitObstacle.box.max.x + (size.sx * previewScale) / 2 : hitObstacle.box.min.x - (size.sx * previewScale) / 2;
+                    intersectPoint.y = hitObstacle.box.min.y + (size.sy * previewScale) / 2;
+                } else if (Math.abs(normal.z) > 0.5) {
+                    intersectPoint.z = normal.z > 0 ? hitObstacle.box.max.z + (size.sz * previewScale) / 2 : hitObstacle.box.min.z - (size.sz * previewScale) / 2;
+                    intersectPoint.y = hitObstacle.box.min.y + (size.sy * previewScale) / 2;
+                }
+            } else {
+                intersectPoint.y = (size.sy * previewScale) / 2;
+            }
+            
+            previewMesh.position.copy(intersectPoint);
+            
+            const cameraDirection = new THREE.Vector3();
+            camera.getWorldDirection(cameraDirection);
+            cameraDirection.y = 0;
+            cameraDirection.normalize();
+            
+            const angle = Math.atan2(cameraDirection.x, cameraDirection.z);
+            previewMesh.rotation.y = angle;
+        }
+
+        function checkCollision(newBox) {
+            const epsilon = 0.01;
+            for (const obstacle of obstacles) {
+                const b = obstacle.box;
+                
+                if (newBox.max.y <= b.min.y + epsilon || newBox.min.y >= b.max.y - epsilon) {
+                    continue;
+                }
+                
+                if (newBox.max.x <= b.min.x + epsilon || newBox.min.x >= b.max.x - epsilon) {
+                    continue;
+                }
+                
+                if (newBox.max.z <= b.min.z + epsilon || newBox.min.z >= b.max.z - epsilon) {
+                    continue;
+                }
+                
+                return true;
+            }
+            return false;
+        }
+
+        function placeElement() {
+            if (!selectedItemType || !previewMesh) return;
+            
+            const newBox = new THREE.Box3().setFromObject(previewMesh);
+            
+            if (checkCollision(newBox)) {
+                return;
+            }
+            
+            const colors = mapConfig.obstacleColors || ['#4a4a4a', '#5a5a5a', '#3a3a3a'];
+            const color = new THREE.Color(colors[obstacles.length % colors.length]);
+            
+            const pos = previewMesh.position.clone();
+            
+            const sizes = {
+                wall: { sx: 4, sy: 4, sz: 1 },
+                low_wall: { sx: 4, sy: 1, sz: 4 },
+                box: { sx: 2, sy: 1, sz: 2 },
+                platform: { sx: 6, sy: 0.5, sz: 6 },
+                trench: { sx: 8, sy: 0.5, sz: 8 },
+                window: { sx: 4, sy: 3, sz: 0.5 },
+                pillar: { radius: 0.5, height: 3 }
+            };
+            
+            const size = sizes[selectedItemType] || { sx: 2, sy: 2, sz: 2 };
+            
+            const rotation = previewMesh.rotation.y;
+            
+            const data = {
+                type: selectedItemType,
+                x: pos.x,
+                y: pos.y,
+                z: pos.z,
+                rotation: rotation
+            };
+            
+            if (selectedItemType === 'pillar') {
+                data.radius = size.radius * previewScale;
+                data.height = size.height * previewScale;
+                createPillar(pos.x, pos.y, pos.z, data.radius, data.height, color, data);
+            } else {
+                data.sx = size.sx * previewScale;
+                data.sy = size.sy * previewScale;
+                data.sz = size.sz * previewScale;
+                
+                switch(selectedItemType) {
+                    case 'wall': createWall(pos.x, pos.y, pos.z, data.sx, data.sy, data.sz, color, data); break;
+                    case 'low_wall': createLowWall(pos.x, pos.y, pos.z, data.sx, data.sy, data.sz, color, data); break;
+                    case 'box': createBox(pos.x, pos.y, pos.z, data.sx, data.sy, data.sz, color, data); break;
+                    case 'platform': createPlatform(pos.x, pos.y, pos.z, data.sx, data.sy, data.sz, color, data); break;
+                    case 'trench': createTrench(pos.x, pos.y, pos.z, data.sx, data.sy, data.sz, color, data); break;
+                    case 'window': createWindow(pos.x, pos.y, pos.z, data.sx, data.sy, data.sz, color, data); break;
+                }
+            }
+            
+            undoHistory.push({ type: 'add', data: data });
+            if (undoHistory.length > MAX_UNDO) {
+                undoHistory.shift();
+            }
+            
+            updateUI();
+        }
+
+        function selectElement(event) {
+            if (selectedItemType) return;
+            
+            raycaster.setFromCamera(mouse, camera);
+            raycaster.far = 200;
+            
+            let closestIntersect = null;
+            let closestObstacle = null;
+            
+            for (const obstacle of obstacles) {
+                const intersects = raycaster.intersectObject(obstacle.mesh, true);
+                if (intersects.length > 0) {
+                    if (!closestIntersect || intersects[0].distance < closestIntersect.distance) {
+                        closestIntersect = intersects[0];
+                        closestObstacle = obstacle;
+                    }
+                }
+            }
+            
+            if (!closestObstacle) {
+                const allMeshes = [];
+                scene.traverse((child) => {
+                    if (child.isMesh && child.name !== 'ground') {
+                        allMeshes.push(child);
+                    }
+                });
+                const intersects = raycaster.intersectObjects(allMeshes, true);
+                if (intersects.length > 0) {
+                    let targetMesh = intersects[0].object;
+                    while (targetMesh.parent && !targetMesh.userData.type) {
+                        targetMesh = targetMesh.parent;
+                    }
+                    const obstacle = obstacles.find(o => o.mesh === targetMesh || o.mesh.children.includes(targetMesh));
+                    if (obstacle) {
+                        closestObstacle = obstacle;
+                    }
+                }
+            }
+            
+            if (closestObstacle) {
+                if (selectedObject === closestObstacle) {
+                    deselectObject();
+                } else {
+                    deselectObject();
+                    selectedObject = closestObstacle;
+                    if (closestObstacle.mesh.material) {
+                        closestObstacle.mesh.material.emissive = new THREE.Color(0x00ffff);
+                        closestObstacle.mesh.material.emissiveIntensity = 0.5;
+                    }
+                    updateUI();
+                }
+            } else {
+                deselectObject();
+            }
+        }
+
+        function deselectObject() {
+            if (selectedObject) {
+                selectedObject.mesh.material.emissive = new THREE.Color(0x000000);
+                selectedObject.mesh.material.emissiveIntensity = 0;
+                selectedObject = null;
+            }
+            updateUI();
+        }
+
+        function deleteSelected() {
+            if (!selectedObject) return;
+            
+            const data = selectedObject.mesh.userData;
+            undoHistory.push({ type: 'delete', data: data });
+            if (undoHistory.length > MAX_UNDO) {
+                undoHistory.shift();
+            }
+            
+            scene.remove(selectedObject.mesh);
+            selectedObject.mesh.geometry.dispose();
+            selectedObject.mesh.material.dispose();
+            obstacles = obstacles.filter(o => o !== selectedObject);
+            selectedObject = null;
+            
+            updateUI();
+        }
+
+        function undo() {
+            if (undoHistory.length === 0) return;
+            
+            const lastAction = undoHistory.pop();
+            
+            if (lastAction.type === 'add') {
+                const obstacle = obstacles.find(o => o.mesh.userData === lastAction.data);
+                if (obstacle) {
+                    scene.remove(obstacle.mesh);
+                    obstacle.mesh.geometry.dispose();
+                    obstacle.mesh.material.dispose();
+                    obstacles = obstacles.filter(o => o !== obstacle);
+                }
+            } else if (lastAction.type === 'delete') {
+                const colors = mapConfig.obstacleColors || ['#4a4a4a', '#5a5a5a', '#3a3a3a'];
+                const color = new THREE.Color(colors[obstacles.length % colors.length]);
+                const data = lastAction.data;
+                
+                if (data.type === 'pillar') {
+                    createPillar(data.x, data.y, data.z, data.radius, data.height, color, data);
+                } else {
+                    switch(data.type) {
+                        case 'wall': createWall(data.x, data.y, data.z, data.sx, data.sy, data.sz, color, data); break;
+                        case 'low_wall': createLowWall(data.x, data.y, data.z, data.sx, data.sy, data.sz, color, data); break;
+                        case 'box': createBox(data.x, data.y, data.z, data.sx, data.sy, data.sz, color, data); break;
+                        case 'platform': createPlatform(data.x, data.y, data.z, data.sx, data.sy, data.sz, color, data); break;
+                        case 'trench': createTrench(data.x, data.y, data.z, data.sx, data.sy, data.sz, color, data); break;
+                        case 'window': createWindow(data.x, data.y, data.z, data.sx, data.sy, data.sz, color, data); break;
+                    }
+                }
+            } else if (lastAction.type === 'clear') {
+                lastAction.data.forEach(data => {
+                    const colors = mapConfig.obstacleColors || ['#4a4a4a', '#5a5a5a', '#3a3a3a'];
+                    const color = new THREE.Color(colors[obstacles.length % colors.length]);
+                    
+                    if (data.type === 'pillar') {
+                        createPillar(data.x, data.y, data.z, data.radius, data.height, color, data);
+                    } else {
+                        switch(data.type) {
+                            case 'wall': createWall(data.x, data.y, data.z, data.sx, data.sy, data.sz, color, data); break;
+                            case 'low_wall': createLowWall(data.x, data.y, data.z, data.sx, data.sy, data.sz, color, data); break;
+                            case 'box': createBox(data.x, data.y, data.z, data.sx, data.sy, data.sz, color, data); break;
+                            case 'platform': createPlatform(data.x, data.y, data.z, data.sx, data.sy, data.sz, color, data); break;
+                            case 'trench': createTrench(data.x, data.y, data.z, data.sx, data.sy, data.sz, color, data); break;
+                            case 'window': createWindow(data.x, data.y, data.z, data.sx, data.sy, data.sz, color, data); break;
+                        }
+                    }
+                });
+            }
+            
+            updateUI();
+        }
+
+        async function saveMap() {
+            const mapName = document.getElementById('mapSelect').value;
+            
+            const layout = obstacles.map(obs => obs.mesh.userData);
+            
+            const updatedConfig = { ...mapConfig, layout };
+            
+            if (layout.length === 0) {
+                updatedConfig.extraFeatures = [];
+            }
+            
+            try {
+                await fetch('/maps.json', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...getMapConfigs(), [mapName]: updatedConfig }, null, 2)
+                });
+                
+                document.getElementById('status').innerText = '状态: 保存成功!';
+                setTimeout(() => {
+                    document.getElementById('status').innerText = '状态: 就绪';
+                }, 2000);
+            } catch (error) {
+                document.getElementById('status').innerText = '状态: 保存失败';
+                console.error('Save error:', error);
+            }
+        }
+
+        function clearMap() {
+            undoHistory.push({ type: 'clear', data: obstacles.map(o => o.mesh.userData) });
+            if (undoHistory.length > MAX_UNDO) {
+                undoHistory.shift();
+            }
+            
+            clearScene();
+            
+            mapConfig.extraFeatures = [];
+            
+            createGround(mapConfig.floorColor);
+            createBoundaryWalls();
+            
+            updateUI();
+        }
+
+        function resetMap() {
+            const mapName = document.getElementById('mapSelect').value;
+            if (originalMapConfigs && originalMapConfigs[mapName]) {
+                window.savedMapConfigs = window.savedMapConfigs || {};
+                window.savedMapConfigs[mapName] = JSON.parse(JSON.stringify(originalMapConfigs[mapName]));
+                loadMap();
+                document.getElementById('status').innerText = '状态: 已恢复默认';
+                setTimeout(() => {
+                    document.getElementById('status').innerText = '状态: 就绪';
+                }, 2000);
+            }
+        }
+
+        function onMouseMove(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            document.getElementById('coord').innerText = 
+                Math.round(camera.position.x) + ', ' + 
+                Math.round(camera.position.y) + ', ' + 
+                Math.round(camera.position.z);
+            
+            updatePreviewMesh();
+            
+            if (isLeftMouseDown) {
+                yaw -= event.movementX * mouseSensitivity;
+                pitch -= event.movementY * mouseSensitivity;
+                pitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, pitch));
+            }
+        }
+
+        function onMouseDown(event) {
+            if (event.target.closest('#ui') || event.target.closest('#items') || event.target.closest('#info') || event.target.closest('#help')) {
+                return;
+            }
+            
+            if (event.button === 0) {
+                isLeftMouseDown = true;
+                mouseDownX = event.clientX;
+                mouseDownY = event.clientY;
+                event.preventDefault();
+            } else if (event.button === 2) {
+                event.preventDefault();
+                if (selectedItemType) {
+                    selectedItemType = null;
+                    removePreviewMesh();
+                    document.querySelectorAll('.item-btn').forEach(btn => btn.classList.remove('selected'));
+                } else if (selectedObject) {
+                    deleteSelected();
+                }
+            }
+        }
+
+        function onMouseUp(event) {
+            if (event.button === 0) {
+                isLeftMouseDown = false;
+                const dx = Math.abs(event.clientX - mouseDownX);
+                const dy = Math.abs(event.clientY - mouseDownY);
+                if (dx < 5 && dy < 5) {
+                    if (selectedItemType) {
+                        placeElement();
+                    } else {
+                        selectElement(event);
+                    }
+                }
+            }
+        }
+
+        function onMouseWheel(event) {
+            if (selectedItemType) {
+                previewScale += event.deltaY * -0.001;
+                previewScale = Math.max(0.5, Math.min(3, previewScale));
+                document.getElementById('previewScale').innerText = previewScale.toFixed(2);
+                updatePreviewMesh();
+            }
+        }
+
+        function onKeyDown(event) {
+            keys[event.code] = true;
+            
+            if (event.code === 'Delete') {
+                deleteSelected();
+            } else if (event.ctrlKey && event.code === 'KeyZ') {
+                event.preventDefault();
+                undo();
+            } else if (event.code === 'Space') {
+                event.preventDefault();
+                
+                if (!isFlying && onGround) {
+                    velocityY = Math.sqrt(2 * gravity * maxJumpHeight);
+                    onGround = false;
+                }
+            }
+        }
+
+        function onKeyUp(event) {
+            keys[event.code] = false;
+            
+            if (event.code === 'Space') {
+                const now = Date.now();
+                
+                if (now - lastSpaceTime < 400) {
+                    isFlying = !isFlying;
+                    lastSpaceTime = 0;
+                    document.getElementById('status').innerText = '状态: ' + (isFlying ? '飞行模式' : '步行模式');
+                } else {
+                    lastSpaceTime = now;
+                }
+            }
+        }
+
+        function updateUI() {
+            if (selectedObject) {
+                const data = selectedObject.mesh.userData;
+                document.getElementById('selected').innerText = '是';
+                document.getElementById('objType').innerText = getTypeName(data.type);
+                
+                const pos = selectedObject.mesh.position;
+                document.getElementById('objPos').innerText = `(${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)})`;
+                
+                if (data.type === 'pillar') {
+                    document.getElementById('objSize').innerText = `半径: ${data.radius}, 高度: ${data.height}`;
+                } else {
+                    document.getElementById('objSize').innerText = `宽: ${data.sx}, 高: ${data.sy}, 长: ${data.sz}`;
+                }
+            } else {
+                document.getElementById('selected').innerText = '-';
+                document.getElementById('objType').innerText = '-';
+                document.getElementById('objPos').innerText = '-';
+                document.getElementById('objSize').innerText = '-';
+            }
+        }
+        
+        function getTypeName(type) {
+            const names = {
+                wall: '高墙',
+                low_wall: '矮墙',
+                box: '箱子',
+                platform: '平台',
+                trench: '坑道',
+                window: '窗户墙',
+                pillar: '柱子'
+            };
+            return names[type] || type;
+        }
+
+        function updateCamera() {
+            const delta = 0.016;
+            const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+            const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+            
+            let speed = keys['ShiftLeft'] || keys['ShiftRight'] ? 10 : 6;
+            
+            if (isFlying) {
+                speed = 8;
+                const direction = new THREE.Vector3();
+                if (keys['KeyW']) direction.add(forward);
+                if (keys['KeyS']) direction.sub(forward);
+                if (keys['KeyA']) direction.sub(right);
+                if (keys['KeyD']) direction.add(right);
+                
+                if (direction.lengthSq() > 0) {
+                    direction.normalize();
+                    camera.position.x += direction.x * speed * delta;
+                    camera.position.z += direction.z * speed * delta;
+                }
+                
+                if (keys['Space']) camera.position.y += speed * delta;
+                if (keys['ShiftLeft']) camera.position.y -= speed * delta;
+            } else {
+                const direction = new THREE.Vector3();
+                if (keys['KeyW']) direction.add(forward);
+                if (keys['KeyS']) direction.sub(forward);
+                if (keys['KeyA']) direction.sub(right);
+                if (keys['KeyD']) direction.add(right);
+                
+                if (direction.lengthSq() > 0) {
+                    direction.normalize();
+                    const moveAmount = speed * delta;
+                    camera.position.x += direction.x * moveAmount;
+                    camera.position.z += direction.z * moveAmount;
+                }
+                
+                velocityY -= gravity * delta;
+                camera.position.y += velocityY * delta;
+                
+                resolveCameraObstacles();
+                
+                const groundHeight = getGroundHeight(camera.position.x, camera.position.z);
+                if (camera.position.y <= groundHeight + 0.05) {
+                    camera.position.y = groundHeight;
+                    velocityY = 0;
+                    onGround = true;
+                }
+            }
+            
+            camera.position.x = THREE.MathUtils.clamp(camera.position.x, -44, 44);
+            camera.position.z = THREE.MathUtils.clamp(camera.position.z, -44, 44);
+            
+            camera.rotation.set(0, 0, 0);
+            camera.rotateY(yaw);
+            camera.rotateX(pitch);
+        }
+        
+        function getGroundHeight(x, z) {
+            let groundHeight = 1.7;
+            for (const obstacle of obstacles) {
+                const b = obstacle.box;
+                if (x >= b.min.x - 0.35 && x <= b.max.x + 0.35 &&
+                    z >= b.min.z - 0.35 && z <= b.max.z + 0.35) {
+                    const topY = b.max.y + 1.7;
+                    if (topY > groundHeight) {
+                        groundHeight = topY;
+                    }
+                }
+            }
+            return groundHeight;
+        }
+        
+        function resolveCameraObstacles() {
+            const cameraBox = new THREE.Box3(
+                new THREE.Vector3(camera.position.x - 0.35, camera.position.y - 1.7, camera.position.z - 0.35),
+                new THREE.Vector3(camera.position.x + 0.35, camera.position.y + 0.3, camera.position.z + 0.35)
+            );
+            
+            let maxGroundHeight = camera.position.y - 1.7;
+            let hasVerticalCollision = false;
+            
+            for (const obstacle of obstacles) {
+                if (!cameraBox.intersectsBox(obstacle.box)) continue;
+                
+                const b = obstacle.box;
+                const cameraBottom = camera.position.y - 1.7;
+                const cameraTop = camera.position.y + 0.3;
+                
+                const dx1 = Math.abs(camera.position.x - b.min.x);
+                const dx2 = Math.abs(camera.position.x - b.max.x);
+                const dz1 = Math.abs(camera.position.z - b.min.z);
+                const dz2 = Math.abs(camera.position.z - b.max.z);
+                const dy1 = Math.abs(cameraBottom - b.max.y);
+                const dy2 = Math.abs(cameraTop - b.min.y);
+                
+                const minX = Math.min(dx1, dx2);
+                const minZ = Math.min(dz1, dz2);
+                const minY = Math.min(dy1, dy2);
+                
+                const minDist = Math.min(minX, minZ, minY);
+                
+                if (minDist === minY) {
+                    if (cameraBottom < b.max.y && cameraTop > b.max.y) {
+                        if (b.max.y > maxGroundHeight) {
+                            maxGroundHeight = b.max.y;
+                        }
+                        hasVerticalCollision = true;
+                    } else if (cameraTop > b.min.y && cameraBottom < b.min.y) {
+                        camera.position.y = b.min.y - 0.3;
+                        velocityY = 0;
+                    }
+                } else if (minDist === minX) {
+                    camera.position.x = camera.position.x < (b.min.x + b.max.x) / 2 ?
+                        b.min.x - 0.4 : b.max.x + 0.4;
+                } else {
+                    camera.position.z = camera.position.z < (b.min.z + b.max.z) / 2 ?
+                        b.min.z - 0.4 : b.max.z + 0.4;
+                }
+            }
+            
+            if (hasVerticalCollision && maxGroundHeight > camera.position.y - 1.7) {
+                camera.position.y = maxGroundHeight + 1.7;
+                velocityY = 0;
+                onGround = true;
+            }
+        }
+
+        let frameCount = 0;
+        let lastFpsTime = performance.now();
+        function animate() {
+            requestAnimationFrame(animate);
+            updateCamera();
+            renderer.render(scene, camera);
+            frameCount++;
+            const now = performance.now();
+            if (now - lastFpsTime >= 1000) {
+                document.getElementById('fps').textContent = Math.round(frameCount / ((now - lastFpsTime) / 1000));
+                frameCount = 0;
+                lastFpsTime = now;
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>

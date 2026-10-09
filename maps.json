@@ -1,0 +1,654 @@
+{
+  "ruin_city": {
+    "name": "废墟城市",
+    "skyColor": "#080d16",
+    "fogColor": "#080d16",
+    "fogNear": 25,
+    "fogFar": 90,
+    "floorColor": "#202831",
+    "wallColor": "#17212c",
+    "obstacleColors": [
+      "#4a3c35",
+      "#34434c",
+      "#5a4a3a"
+    ],
+    "ambientColor": "#9ec9ff",
+    "dirLightColor": "#9dc9ff",
+    "dirLightIntensity": 2.3,
+    "pointLightColor": "#ff2020",
+    "pointLightCount": 8,
+    "pointLightIntensity": 3,
+    "playerStart1": [
+      0,
+      1.7,
+      35
+    ],
+    "playerStart2": [
+      0,
+      1.7,
+      -35
+    ],
+    "layout": [
+      {
+        "type": "wall",
+        "x": 0,
+        "y": 5,
+        "z": -49,
+        "sx": 100,
+        "sy": 10,
+        "sz": 2
+      },
+      {
+        "type": "wall",
+        "x": 0,
+        "y": 5,
+        "z": 49,
+        "sx": 100,
+        "sy": 10,
+        "sz": 2
+      },
+      {
+        "type": "wall",
+        "x": -49,
+        "y": 5,
+        "z": 0,
+        "sx": 2,
+        "sy": 10,
+        "sz": 100
+      },
+      {
+        "type": "wall",
+        "x": 49,
+        "y": 5,
+        "z": 0,
+        "sx": 2,
+        "sy": 10,
+        "sz": 100
+      },
+      {
+        "type": "wall",
+        "x": 0,
+        "y": 5,
+        "z": -49,
+        "sx": 100,
+        "sy": 10,
+        "sz": 2
+      },
+      {
+        "type": "wall",
+        "x": 0,
+        "y": 5,
+        "z": 49,
+        "sx": 100,
+        "sy": 10,
+        "sz": 2
+      },
+      {
+        "type": "wall",
+        "x": -49,
+        "y": 5,
+        "z": 0,
+        "sx": 2,
+        "sy": 10,
+        "sz": 100
+      },
+      {
+        "type": "wall",
+        "x": 49,
+        "y": 5,
+        "z": 0,
+        "sx": 2,
+        "sy": 10,
+        "sz": 100
+      },
+      {
+        "type": "wall",
+        "x": 0,
+        "y": 5,
+        "z": -48,
+        "sx": 100,
+        "sy": 10,
+        "sz": 2
+      },
+      {
+        "type": "wall",
+        "x": 0,
+        "y": 5,
+        "z": 48,
+        "sx": 100,
+        "sy": 10,
+        "sz": 2
+      },
+      {
+        "type": "wall",
+        "x": -48,
+        "y": 5,
+        "z": 0,
+        "sx": 2,
+        "sy": 10,
+        "sz": 100
+      },
+      {
+        "type": "wall",
+        "x": 48,
+        "y": 5,
+        "z": 0,
+        "sx": 2,
+        "sy": 10,
+        "sz": 100
+      },
+      {
+        "type": "wall",
+        "x": 0,
+        "y": 4,
+        "z": 0,
+        "sx": 2,
+        "sy": 8,
+        "sz": 40
+      },
+      {
+        "type": "low_wall",
+        "x": -15,
+        "y": 0.5,
+        "z": 0,
+        "sx": 4,
+        "sy": 1,
+        "sz": 20
+      },
+      {
+        "type": "low_wall",
+        "x": 15,
+        "y": 0.5,
+        "z": 0,
+        "sx": 4,
+        "sy": 1,
+        "sz": 20
+      },
+      {
+        "type": "box",
+        "x": -25,
+        "y": 0.5,
+        "z": 15,
+        "sx": 2,
+        "sy": 1,
+        "sz": 2
+      },
+      {
+        "type": "box",
+        "x": 25,
+        "y": 0.5,
+        "z": 15,
+        "sx": 2,
+        "sy": 1,
+        "sz": 2
+      },
+      {
+        "type": "box",
+        "x": -25,
+        "y": 0.5,
+        "z": -15,
+        "sx": 2,
+        "sy": 1,
+        "sz": 2
+      },
+      {
+        "type": "box",
+        "x": 25,
+        "y": 0.5,
+        "z": -15,
+        "sx": 2,
+        "sy": 1,
+        "sz": 2
+      },
+      {
+        "type": "platform",
+        "x": 0,
+        "y": 2.25,
+        "z": 20,
+        "sx": 8,
+        "sy": 0.5,
+        "sz": 8
+      },
+      {
+        "type": "platform",
+        "x": 0,
+        "y": 2.25,
+        "z": -20,
+        "sx": 8,
+        "sy": 0.5,
+        "sz": 8
+      },
+      {
+        "type": "pillar",
+        "x": -10,
+        "y": 2,
+        "z": 25,
+        "radius": 0.5,
+        "height": 4
+      },
+      {
+        "type": "pillar",
+        "x": 10,
+        "y": 2,
+        "z": 25,
+        "radius": 0.5,
+        "height": 4
+      },
+      {
+        "type": "pillar",
+        "x": -10,
+        "y": 2,
+        "z": -25,
+        "radius": 0.5,
+        "height": 4
+      },
+      {
+        "type": "pillar",
+        "x": 10,
+        "y": 2,
+        "z": -25,
+        "radius": 0.5,
+        "height": 4
+      },
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {
+        "type": "wall",
+        "x": -7.995633747793089,
+        "y": 2,
+        "z": 38.314456761247115,
+        "rotation": -2.6025926535897934,
+        "sx": 4,
+        "sy": 4,
+        "sz": 1
+      },
+      {
+        "type": "wall",
+        "x": -4.181624602520191,
+        "y": 2,
+        "z": 39.33626379958555,
+        "rotation": 2.428792653589793,
+        "sx": 4,
+        "sy": 4,
+        "sz": 1
+      }
+    ],
+    "extraFeatures": [
+      "broken_buildings",
+      "street_lamps",
+      "debris"
+    ]
+  },
+  "desert_base": {
+    "name": "沙漠基地",
+    "skyColor": "#87CEEB",
+    "fogColor": "#FFE4B5",
+    "fogNear": 30,
+    "fogFar": 100,
+    "floorColor": "#DAA520",
+    "wallColor": "#8B4513",
+    "obstacleColors": [
+      "#A0522D",
+      "#D2691E",
+      "#CD853F"
+    ],
+    "ambientColor": "#FFFFFF",
+    "dirLightColor": "#FFFFFF",
+    "dirLightIntensity": 4.5,
+    "pointLightColor": "#FFD700",
+    "pointLightCount": 4,
+    "pointLightIntensity": 2,
+    "playerStart1": [
+      0,
+      1.7,
+      35
+    ],
+    "playerStart2": [
+      0,
+      1.7,
+      -35
+    ],
+    "layout": [
+      {
+        "type": "wall",
+        "x": 0,
+        "y": 5,
+        "z": -48,
+        "sx": 100,
+        "sy": 10,
+        "sz": 2
+      },
+      {
+        "type": "wall",
+        "x": 0,
+        "y": 5,
+        "z": 48,
+        "sx": 100,
+        "sy": 10,
+        "sz": 2
+      },
+      {
+        "type": "wall",
+        "x": -48,
+        "y": 5,
+        "z": 0,
+        "sx": 2,
+        "sy": 10,
+        "sz": 100
+      },
+      {
+        "type": "wall",
+        "x": 48,
+        "y": 5,
+        "z": 0,
+        "sx": 2,
+        "sy": 10,
+        "sz": 100
+      },
+      {
+        "type": "wall",
+        "x": 0,
+        "y": 3,
+        "z": 0,
+        "sx": 2,
+        "sy": 6,
+        "sz": 50
+      },
+      {
+        "type": "low_wall",
+        "x": -20,
+        "y": 0.5,
+        "z": 0,
+        "sx": 3,
+        "sy": 1,
+        "sz": 30
+      },
+      {
+        "type": "low_wall",
+        "x": 20,
+        "y": 0.5,
+        "z": 0,
+        "sx": 3,
+        "sy": 1,
+        "sz": 30
+      },
+      {
+        "type": "box",
+        "x": -30,
+        "y": 0.5,
+        "z": 10,
+        "sx": 3,
+        "sy": 1,
+        "sz": 3
+      },
+      {
+        "type": "box",
+        "x": 30,
+        "y": 0.5,
+        "z": 10,
+        "sx": 3,
+        "sy": 1,
+        "sz": 3
+      },
+      {
+        "type": "box",
+        "x": -30,
+        "y": 0.5,
+        "z": -10,
+        "sx": 3,
+        "sy": 1,
+        "sz": 3
+      },
+      {
+        "type": "box",
+        "x": 30,
+        "y": 0.5,
+        "z": -10,
+        "sx": 3,
+        "sy": 1,
+        "sz": 3
+      },
+      {
+        "type": "window",
+        "x": 0,
+        "y": 3,
+        "z": 25,
+        "sx": 8,
+        "sy": 6,
+        "sz": 0.5
+      },
+      {
+        "type": "window",
+        "x": 0,
+        "y": 3,
+        "z": -25,
+        "sx": 8,
+        "sy": 6,
+        "sz": 0.5
+      },
+      {
+        "type": "platform",
+        "x": -35,
+        "y": 3,
+        "z": 0,
+        "sx": 10,
+        "sy": 0.5,
+        "sz": 15
+      },
+      {
+        "type": "platform",
+        "x": 35,
+        "y": 3,
+        "z": 0,
+        "sx": 10,
+        "sy": 0.5,
+        "sz": 15
+      }
+    ],
+    "extraFeatures": [
+      "sand_dunes",
+      "cacti"
+    ]
+  },
+  "ice_station": {
+    "name": "极地空间站",
+    "skyColor": "#1a3a5c",
+    "fogColor": "#4a6a8c",
+    "fogNear": 20,
+    "fogFar": 80,
+    "floorColor": "#87CEEB",
+    "wallColor": "#6a9ac0",
+    "obstacleColors": [
+      "#B0E0E6",
+      "#ADD8E6",
+      "#87CEEB"
+    ],
+    "ambientColor": "#E0F4FF",
+    "dirLightColor": "#FFFFFF",
+    "dirLightIntensity": 3,
+    "pointLightColor": "#00BFFF",
+    "pointLightCount": 6,
+    "pointLightIntensity": 2.5,
+    "playerStart1": [
+      0,
+      1.7,
+      35
+    ],
+    "playerStart2": [
+      0,
+      1.7,
+      -35
+    ],
+    "layout": [
+      {
+        "type": "wall",
+        "x": 0,
+        "y": 5,
+        "z": -48,
+        "sx": 100,
+        "sy": 10,
+        "sz": 2
+      },
+      {
+        "type": "wall",
+        "x": 0,
+        "y": 5,
+        "z": 48,
+        "sx": 100,
+        "sy": 10,
+        "sz": 2
+      },
+      {
+        "type": "wall",
+        "x": -48,
+        "y": 5,
+        "z": 0,
+        "sx": 2,
+        "sy": 10,
+        "sz": 100
+      },
+      {
+        "type": "wall",
+        "x": 48,
+        "y": 5,
+        "z": 0,
+        "sx": 2,
+        "sy": 10,
+        "sz": 100
+      },
+      {
+        "type": "wall",
+        "x": -25,
+        "y": 4,
+        "z": 0,
+        "sx": 2,
+        "sy": 8,
+        "sz": 50
+      },
+      {
+        "type": "wall",
+        "x": 25,
+        "y": 4,
+        "z": 0,
+        "sx": 2,
+        "sy": 8,
+        "sz": 50
+      },
+      {
+        "type": "low_wall",
+        "x": 0,
+        "y": 0.5,
+        "z": -15,
+        "sx": 40,
+        "sy": 1,
+        "sz": 2
+      },
+      {
+        "type": "low_wall",
+        "x": 0,
+        "y": 0.5,
+        "z": 15,
+        "sx": 40,
+        "sy": 1,
+        "sz": 2
+      },
+      {
+        "type": "box",
+        "x": -10,
+        "y": 0.5,
+        "z": 0,
+        "sx": 2,
+        "sy": 1,
+        "sz": 2
+      },
+      {
+        "type": "box",
+        "x": 10,
+        "y": 0.5,
+        "z": 0,
+        "sx": 2,
+        "sy": 1,
+        "sz": 2
+      },
+      {
+        "type": "trench",
+        "x": 0,
+        "y": 0.25,
+        "z": 0,
+        "sx": 15,
+        "sy": 0.5,
+        "sz": 15
+      },
+      {
+        "type": "platform",
+        "x": -35,
+        "y": 2.75,
+        "z": 20,
+        "sx": 8,
+        "sy": 0.5,
+        "sz": 8
+      },
+      {
+        "type": "platform",
+        "x": 35,
+        "y": 2.75,
+        "z": 20,
+        "sx": 8,
+        "sy": 0.5,
+        "sz": 8
+      },
+      {
+        "type": "platform",
+        "x": -35,
+        "y": 2.75,
+        "z": -20,
+        "sx": 8,
+        "sy": 0.5,
+        "sz": 8
+      },
+      {
+        "type": "platform",
+        "x": 35,
+        "y": 2.75,
+        "z": -20,
+        "sx": 8,
+        "sy": 0.5,
+        "sz": 8
+      },
+      {
+        "type": "pillar",
+        "x": 0,
+        "y": 3,
+        "z": -35,
+        "radius": 0.6,
+        "height": 6
+      },
+      {
+        "type": "pillar",
+        "x": 0,
+        "y": 3,
+        "z": 35,
+        "radius": 0.6,
+        "height": 6
+      }
+    ],
+    "extraFeatures": [
+      "crystal_structures",
+      "ice_walls"
+    ]
+  }
+}
